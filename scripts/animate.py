@@ -7,7 +7,7 @@ from omegaconf import OmegaConf
 import torch
 
 import diffusers
-from diffusers import AutoencoderKL, DDIMScheduler
+from diffusers import AutoencoderKL, DDIMScheduler, EulerDiscreteScheduler, EulerAncestralDiscreteScheduler
 
 from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
@@ -59,6 +59,8 @@ def main(args):
             pipeline = AnimationPipeline(
                 vae=vae, text_encoder=text_encoder, tokenizer=tokenizer, unet=unet,
                 scheduler=DDIMScheduler(**OmegaConf.to_container(inference_config.noise_scheduler_kwargs)),
+                # scheduler=EulerDiscreteScheduler(**OmegaConf.to_container(inference_config.noise_scheduler_kwargs)),
+                # scheduler=EulerAncestralDiscreteScheduler(**OmegaConf.to_container(inference_config.noise_scheduler_kwargs)),
             ).to("cuda")
 
             # 1. unet ckpt

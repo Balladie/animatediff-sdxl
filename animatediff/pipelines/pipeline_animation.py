@@ -286,7 +286,7 @@ class AnimationPipeline(DiffusionPipeline):
             )
 
     def prepare_latents(self, init_image, batch_size, num_channels_latents, video_length, height, width, dtype, device,
-                        generator, timestep=None, latents=None):
+                        generator, denoise_timestep=None, noise_timestep=None, latents=None):
         shape = (
             batch_size, num_channels_latents, video_length, height // self.vae_scale_factor,
             width // self.vae_scale_factor)
@@ -306,6 +306,8 @@ class AnimationPipeline(DiffusionPipeline):
                 init_latents = torch.cat(init_latents, dim=0)
             else:
                 init_latents = self.vae.encode(image).latent_dist.sample(generator)
+
+            init_latents = 0.18215 * init_latents
         else:
             init_latents = None
 
@@ -330,28 +332,9 @@ class AnimationPipeline(DiffusionPipeline):
             else:
                 latents = torch.randn(shape, generator=generator, device=rand_device, dtype=dtype).to(device)
 
-                if timestep:
-                    # ref diffusers img2img
-                    init_latents = init_latents.unsqueeze(2).repeat(1, 1, 16, 1, 1)
-                    # equal to "latents[:,:, i,:,:] = init_latents * 0.3259 + latents[:,:, i,:,:] * 0.9454"
-                    latents = self.scheduler.add_noise(init_latents, latents, timestep)
-
                 if init_latents is not None:
-
-                    # init_alpha = [0.1, 0.09, 0.08, 0.07, 0.06, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
-                    #               0.05, 0.05]
-
-                    init_alpha = 0.1
-                    truncate_alpha = 0.06 # hyper-parameters
-                    for i in range(video_length):
-                        # # ref https://github.com/talesofai/AnimateDiff
-                        # init_alpha = (video_length - float(i)) / video_length / 30
-                        # latents[:, :, i, :, :] = init_latents * init_alpha + latents[:, :, i, :, :] * (1 - init_alpha)
-
-                        # truncate the alpha value
-                        if init_alpha != truncate_alpha:
-                            init_alpha = round(0.1 - i * 0.01, 2)  # decimal
-                        latents[:, :, i, :, :] = init_latents * init_alpha + latents[:, :, i, :, :] * (1 - init_alpha)
+                    for i in range(video_length):                    
+                        latents[:, :, i, :, :] = self.scheduler.add_noise(init_latents, latents[:, :, i, :, :], noise_timestep)
         else:
             if latents.shape != shape:
                 raise ValueError(f"Unexpected latents shape, got {latents.shape}, expected {shape}")
@@ -427,10 +410,18 @@ class AnimationPipeline(DiffusionPipeline):
         timesteps = self.scheduler.timesteps
 
         # ref diffusers img2img
-        denoise_strength = 0.6 # hyper-parameters
-        timesteps, num_inference_steps = self.get_timesteps(num_inference_steps, denoise_strength)
-        # noise_timestep = timesteps[0:1]
-        # noise_timestep = noise_timestep.repeat(batch_size * num_videos_per_prompt)
+        if init_image:
+            denoise_strength = 0.68 # hyper-parameters
+            timesteps_img2img, num_inference_steps_img2img = self.get_timesteps(num_inference_steps, denoise_strength)
+
+            noise_strength = 0.75 # hyper-parameters
+            timesteps_forward, _ = self.get_timesteps(num_inference_steps, noise_strength)
+
+        denoise_timestep = timesteps_img2img[0:1]
+        denoise_timestep = denoise_timestep.repeat(batch_size * num_videos_per_prompt)
+
+        noise_timestep = timesteps_forward[0:1]
+        noise_timestep = noise_timestep.repeat(batch_size * num_videos_per_prompt)
 
         # Prepare latent variables
         num_channels_latents = self.unet.in_channels
@@ -444,7 +435,8 @@ class AnimationPipeline(DiffusionPipeline):
             text_embeddings.dtype,
             device,
             generator,
-            timestep=None,
+            denoise_timestep=denoise_timestep,
+            noise_timestep=noise_timestep,
             latents=latents,
         )
         latents_dtype = latents.dtype
@@ -453,22 +445,15 @@ class AnimationPipeline(DiffusionPipeline):
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
 
         # Denoising loop
-        num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
-        with self.progress_bar(total=num_inference_steps) as progress_bar:
-            for i, t in enumerate(timesteps):
+        num_warmup_steps = len(timesteps_img2img) - num_inference_steps_img2img * self.scheduler.order
+        with self.progress_bar(total=num_inference_steps_img2img) as progress_bar:
+            for i, t in enumerate(timesteps_img2img):
                 # expand the latents if we are doing classifier free guidance
                 latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
                 # predict the noise residual
                 noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample.to(dtype=latents_dtype)
-                # noise_pred = []
-                # import pdb
-                # pdb.set_trace()
-                # for batch_idx in range(latent_model_input.shape[0]):
-                #     noise_pred_single = self.unet(latent_model_input[batch_idx:batch_idx+1], t, encoder_hidden_states=text_embeddings[batch_idx:batch_idx+1]).sample.to(dtype=latents_dtype)
-                #     noise_pred.append(noise_pred_single)
-                # noise_pred = torch.cat(noise_pred)
 
                 # perform guidance
                 if do_classifier_free_guidance:
