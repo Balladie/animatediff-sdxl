@@ -417,11 +417,14 @@ class AnimationPipeline(DiffusionPipeline):
             noise_strength = 0.75 # hyper-parameters
             timesteps_forward, _ = self.get_timesteps(num_inference_steps, noise_strength)
 
-        denoise_timestep = timesteps_img2img[0:1]
-        denoise_timestep = denoise_timestep.repeat(batch_size * num_videos_per_prompt)
+            denoise_timestep = timesteps_img2img[0:1]
+            denoise_timestep = denoise_timestep.repeat(batch_size * num_videos_per_prompt)
 
-        noise_timestep = timesteps_forward[0:1]
-        noise_timestep = noise_timestep.repeat(batch_size * num_videos_per_prompt)
+            noise_timestep = timesteps_forward[0:1]
+            noise_timestep = noise_timestep.repeat(batch_size * num_videos_per_prompt)
+        else:
+            denoise_timestep = None
+            noise_timestep = None
 
         # Prepare latent variables
         num_channels_latents = self.unet.in_channels
@@ -444,10 +447,14 @@ class AnimationPipeline(DiffusionPipeline):
         # Prepare extra step kwargs.
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
 
+        if init_image:
+            timesteps = timesteps_img2img
+            num_inference_steps = num_inference_steps_img2img
+
         # Denoising loop
-        num_warmup_steps = len(timesteps_img2img) - num_inference_steps_img2img * self.scheduler.order
-        with self.progress_bar(total=num_inference_steps_img2img) as progress_bar:
-            for i, t in enumerate(timesteps_img2img):
+        num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
+        with self.progress_bar(total=num_inference_steps) as progress_bar:
+            for i, t in enumerate(timesteps):
                 # expand the latents if we are doing classifier free guidance
                 latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
