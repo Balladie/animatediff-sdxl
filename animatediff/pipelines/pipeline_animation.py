@@ -411,10 +411,10 @@ class AnimationPipeline(DiffusionPipeline):
 
         # ref diffusers img2img
         if init_image:
-            denoise_strength = 0.68 # hyper-parameters
+            denoise_strength = 0.85 # hyper-parameters
             timesteps_img2img, num_inference_steps_img2img = self.get_timesteps(num_inference_steps, denoise_strength)
 
-            noise_strength = 0.75 # hyper-parameters
+            noise_strength = 0.85 # hyper-parameters
             timesteps_forward, _ = self.get_timesteps(num_inference_steps, noise_strength)
 
             denoise_timestep = timesteps_img2img[0:1]
