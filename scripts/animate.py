@@ -58,8 +58,12 @@ def main(args):
             ### >>> create validation pipeline >>> ###
             tokenizer    = CLIPTokenizer.from_pretrained(args.pretrained_model_path, subfolder="tokenizer")
             text_encoder = CLIPTextModel.from_pretrained(args.pretrained_model_path, subfolder="text_encoder")
-            vae          = AutoencoderKL.from_pretrained(args.pretrained_model_path, subfolder="vae")            
             unet         = UNet3DConditionModel.from_pretrained_2d(args.pretrained_model_path, subfolder="unet", unet_additional_kwargs=OmegaConf.to_container(inference_config.unet_additional_kwargs))
+
+            if args.vae_path:
+                vae      = AutoencoderKL.from_pretrained(args.vae_path)  
+            else:
+                vae      = AutoencoderKL.from_pretrained(args.pretrained_model_path, subfolder="vae")            
 
             if is_xformers_available(): unet.enable_xformers_memory_efficient_attention()
             else: assert False
@@ -178,6 +182,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--pretrained_model_path", type=str, default="models/StableDiffusion/stable-diffusion-v1-5",)
+    parser.add_argument("--vae_path", type=str, default=None)
     parser.add_argument("--inference_config",      type=str, default="configs/inference/inference.yaml")    
     parser.add_argument("--config",                type=str, required=True)
     
