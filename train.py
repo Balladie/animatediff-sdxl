@@ -34,7 +34,7 @@ from diffusers.utils.import_utils import is_xformers_available
 import transformers
 from transformers import CLIPTextModel, CLIPTokenizer
 
-from animatediff.data.dataset import WebVid10M
+from animatediff.data.dataset import WebVid10M, Sakugabooru
 from animatediff.models.unet import UNet3DConditionModel
 from animatediff.pipelines.pipeline_animation import AnimationPipeline
 from animatediff.utils.util import save_videos_grid, zero_rank_print
@@ -80,6 +80,8 @@ def main(
     name: str,
     use_wandb: bool,
     launcher: str,
+
+    dataset_name: str,
     
     output_dir: str,
     pretrained_model_path: str,
@@ -226,7 +228,11 @@ def main(
     text_encoder.to(local_rank)
 
     # Get the training dataset
-    train_dataset = WebVid10M(**train_data, is_image=image_finetune)
+    assert dataset_name in ['webvid', 'sakugabooru']
+    if dataset_name == 'webvid':
+        train_dataset = WebVid10M(**train_data, is_image=image_finetune)
+    elif dataset_name == 'sakugabooru':
+        train_dataset = Sakugabooru(**train_data, is_image=image_finetune)
     distributed_sampler = DistributedSampler(
         train_dataset,
         num_replicas=num_processes,

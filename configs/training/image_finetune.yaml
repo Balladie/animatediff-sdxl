@@ -11,10 +11,13 @@ noise_scheduler_kwargs:
   steps_offset:        1
   clip_sample:         false
 
+dataset_name: "webvid"
+num_workers: 0
+
 train_data:
-  csv_path:     "/mnt/petrelfs/guoyuwei/projects/datasets/webvid/results_2M_val.csv"
-  video_folder: "/mnt/petrelfs/guoyuwei/projects/datasets/webvid/2M_val"
-  sample_size:  256
+  csv_path:     "/home/jovyan/data-pvc-paulcha1025/gangin/datasets/webvid/results_2M_val.csv"
+  video_folder: "/home/jovyan/data-pvc-paulcha1025/gangin/datasets/webvid/data_2M_val/videos"
+  sample_size:  512
 
 validation_data:
   prompts:

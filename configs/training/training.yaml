@@ -27,9 +27,12 @@ noise_scheduler_kwargs:
   steps_offset:        1
   clip_sample:         false
 
+dataset_name: "webvid"
+num_workers: 0
+
 train_data:
-  csv_path:        "/mnt/petrelfs/guoyuwei/projects/datasets/webvid/results_2M_val.csv"
-  video_folder:    "/mnt/petrelfs/guoyuwei/projects/datasets/webvid/2M_val"
+  csv_path:        "/home/jovyan/data-pvc-paulcha1025/gangin/datasets/webvid/results_2M_val.csv"
+  video_folder:    "/home/jovyan/data-pvc-paulcha1025/gangin/datasets/webvid/data_2M_val/videos"
   sample_size:     256
   sample_stride:   4
   sample_n_frames: 16
@@ -51,12 +54,12 @@ unet_checkpoint_path: ""
 learning_rate:    1.e-4
 train_batch_size: 4
 
-max_train_epoch:      -1
-max_train_steps:      100
-checkpointing_epochs: -1
-checkpointing_steps:  60
+max_train_epoch:      10
+max_train_steps:      -1
+checkpointing_epochs: 1
+checkpointing_steps:  -1
 
-validation_steps:       5000
+validation_steps:       500
 validation_steps_tuple: [2, 50]
 
 global_seed: 42
