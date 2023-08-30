@@ -8,6 +8,7 @@ import torchvision
 import torch.distributed as dist
 
 from tqdm import tqdm
+from collections import OrderedDict
 from einops import rearrange
 import PIL.Image
 import PIL.ImageOps
@@ -152,3 +153,22 @@ def preprocess_image(image):
     elif isinstance(image[0], torch.Tensor):
         image = torch.cat(image, dim=0)
     return image
+
+
+def load_motion_module_state_dict(path_motion_module):
+    loaded = torch.load(path_motion_module, map_location="cpu")
+
+    # To load pure state_dict
+    if 'state_dict' in loaded.keys():
+        loaded = loaded['state_dict']
+    
+    # To get rid of 'module.' prefix generated from torch DDP
+    new_state_dict = OrderedDict()
+    for k, v in loaded.items():
+        if k[:7] == 'module.':
+            name = k[7:] # remove 'module.' of dataparallel
+        else:
+            name = k
+        new_state_dict[name] = v
+
+    return new_state_dict
