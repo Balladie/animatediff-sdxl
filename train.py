@@ -37,7 +37,7 @@ from transformers import CLIPTextModel, CLIPTokenizer
 from animatediff.data.dataset import WebVid10M, Sakugabooru
 from animatediff.models.unet import UNet3DConditionModel
 from animatediff.pipelines.pipeline_animation import AnimationPipeline
-from animatediff.utils.util import save_videos_grid, zero_rank_print
+from animatediff.utils.util import save_videos_grid, zero_rank_print, load_model
 
 
 
@@ -179,7 +179,7 @@ def main(
     # Load pretrained unet weights
     if unet_checkpoint_path != "":
         zero_rank_print(f"from checkpoint: {unet_checkpoint_path}")
-        unet_checkpoint_path = torch.load(unet_checkpoint_path, map_location="cpu")
+        unet_checkpoint_path = load_model(unet_checkpoint_path)
         if "global_step" in unet_checkpoint_path: zero_rank_print(f"global_step: {unet_checkpoint_path['global_step']}")
         state_dict = unet_checkpoint_path["state_dict"] if "state_dict" in unet_checkpoint_path else unet_checkpoint_path
 
