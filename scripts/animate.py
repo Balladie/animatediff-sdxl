@@ -22,7 +22,7 @@ from transformers import CLIPTextModel, CLIPTokenizer
 
 from animatediff.models.unet import UNet3DConditionModel
 from animatediff.pipelines.pipeline_animation import AnimationPipeline
-from animatediff.utils.util import save_videos_grid, load_motion_module_state_dict
+from animatediff.utils.util import save_videos_grid, load_model
 from animatediff.utils.convert_from_ckpt import convert_ldm_unet_checkpoint, convert_ldm_clip_checkpoint, convert_ldm_vae_checkpoint
 from animatediff.utils.convert_lora_safetensor_to_diffusers import convert_lora
 from diffusers.utils.import_utils import is_xformers_available
@@ -80,7 +80,7 @@ def main(args):
 
             # 1. unet ckpt
             # 1.1 motion module
-            motion_module_state_dict = load_motion_module_state_dict(motion_module)
+            motion_module_state_dict = load_model(motion_module)
             missing, unexpected = pipeline.unet.load_state_dict(motion_module_state_dict, strict=False)
             assert len(unexpected) == 0
             

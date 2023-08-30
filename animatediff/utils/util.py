@@ -155,7 +155,7 @@ def preprocess_image(image):
     return image
 
 
-def load_motion_module_state_dict(path_motion_module):
+def load_model(path_motion_module):
     loaded = torch.load(path_motion_module, map_location="cpu")
 
     # To load pure state_dict
