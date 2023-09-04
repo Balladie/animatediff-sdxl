@@ -422,9 +422,9 @@ def main(
                     "state_dict": unet.state_dict(),
                 }
                 if step == len(train_dataloader) - 1:
-                    torch.save(state_dict, os.path.join(save_path, f"checkpoint-epoch-{epoch+1}.ckpt"))
+                    torch.save(state_dict, os.path.join(save_path, f"checkpoint-epoch-{epoch+1}-step-{global_step+1}.ckpt"))
                 else:
-                    torch.save(state_dict, os.path.join(save_path, f"checkpoint.ckpt"))
+                    torch.save(state_dict, os.path.join(save_path, f"checkpoint-step-{global_step+1}.ckpt"))
                 logging.info(f"Saved state to {save_path} (global_step: {global_step})")
                 
             # Periodically validation
