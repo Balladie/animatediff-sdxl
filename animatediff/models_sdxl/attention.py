@@ -137,7 +137,7 @@ class BasicTransformerBlock(nn.Module):
         timestep: Optional[torch.LongTensor] = None,
         cross_attention_kwargs: Dict[str, Any] = None,
         class_labels: Optional[torch.LongTensor] = None,
-        viceo_length: Optional[int] = None,
+        video_length: Optional[int] = None,
     ):
         # Notice that normalization is always applied before the real computation in the following blocks.
         # 1. Self-Attention

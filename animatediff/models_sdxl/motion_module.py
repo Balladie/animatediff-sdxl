@@ -8,7 +8,7 @@ from torch import nn
 from diffusers.utils import BaseOutput
 from diffusers.utils.import_utils import is_xformers_available
 from diffusers.models.attention import FeedForward
-from diffusers.models.attention_processor import Attention
+from diffusers.models.attention_processor import Attention, LORA_ATTENTION_PROCESSORS
 
 from einops import rearrange, repeat
 import math
@@ -274,23 +274,9 @@ class VersatileAttention(Attention):
     def set_use_memory_efficient_attention_xformers(
         self, use_memory_efficient_attention_xformers: bool, attention_op: Optional[Callable] = None
     ):
-        is_lora = hasattr(self, "processor") and isinstance(
-            self.processor,
-            LORA_ATTENTION_PROCESSORS,
-        )
-        is_custom_diffusion = hasattr(self, "processor") and isinstance(
-            self.processor, (CustomDiffusionAttnProcessor, CustomDiffusionXFormersAttnProcessor)
-        )
-        is_added_kv_processor = hasattr(self, "processor") and isinstance(
-            self.processor,
-            (
-                AttnAddedKVProcessor,
-                AttnAddedKVProcessor2_0,
-                SlicedAttnAddedKVProcessor,
-                XFormersAttnAddedKVProcessor,
-                LoRAAttnAddedKVProcessor,
-            ),
-        )
+        is_lora = False
+        is_custom_diffusion = False
+        is_added_kv_processor = False
 
         if use_memory_efficient_attention_xformers:
             if is_added_kv_processor and (is_lora or is_custom_diffusion):
@@ -398,7 +384,7 @@ class TemporalAttnProcessor:
             hidden_states = rearrange(hidden_states, "(b f) d c -> (b d) f c", f=video_length)
             
             if attn.pos_encoder is not None:
-                hidden_states = self.pos_encoder(hidden_states)
+                hidden_states = attn.pos_encoder(hidden_states)
             
             encoder_hidden_states = repeat(encoder_hidden_states, "b n c -> (b d) n c", d=d) if encoder_hidden_states is not None else encoder_hidden_states
         else:
@@ -560,6 +546,7 @@ class TemporalXFormersAttnProcessor:
         hidden_states: torch.FloatTensor,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
+        video_length: int = None,
         temb: Optional[torch.FloatTensor] = None,
     ):
         residual = hidden_states
@@ -593,7 +580,7 @@ class TemporalXFormersAttnProcessor:
             hidden_states = rearrange(hidden_states, "(b f) d c -> (b d) f c", f=video_length)
             
             if attn.pos_encoder is not None:
-                hidden_states = self.pos_encoder(hidden_states)
+                hidden_states = attn.pos_encoder(hidden_states)
             
             encoder_hidden_states = repeat(encoder_hidden_states, "b n c -> (b d) n c", d=d) if encoder_hidden_states is not None else encoder_hidden_states
         else:

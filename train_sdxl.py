@@ -8,6 +8,7 @@ import argparse
 import datetime
 import subprocess
 
+from functools import partial
 from pathlib import Path
 from tqdm.auto import tqdm
 from einops import rearrange
@@ -34,11 +35,62 @@ from diffusers.utils.import_utils import is_xformers_available
 import transformers
 from transformers import CLIPTextModel, CLIPTokenizer, CLIPTextModelWithProjection
 
-from animatediff.data.dataset import WebVid10M, Sakugabooru
+from animatediff.data.dataset_sdxl import WebVid10M
 from animatediff.models_sdxl.unet import UNet3DConditionModel
 from animatediff.pipelines.pipeline_animation_xl import AnimationXLPipeline
 from animatediff.utils.util import save_videos_grid, zero_rank_print, load_model
 
+
+# Adapted from pipelines.StableDiffusionXLPipeline.encode_prompt
+def encode_prompt(batch, text_encoders, tokenizers, use_empty_prompts, proportion_empty_prompts, caption_column='text', is_train=True):
+    prompt_embeds_list = []
+    prompt_batch = batch[caption_column]
+
+    captions = []
+    for caption in prompt_batch:
+        if use_empty_prompts and random.random() < proportion_empty_prompts:
+            captions.append("")
+        elif isinstance(caption, str):
+            captions.append(caption)
+        elif isinstance(caption, (list, np.ndarray)):
+            # take a random caption if there are multiple
+            captions.append(random.choice(caption) if is_train else caption[0])
+
+    with torch.no_grad():
+        for tokenizer, text_encoder in zip(tokenizers, text_encoders):
+            text_inputs = tokenizer(
+                captions,
+                padding="max_length",
+                max_length=tokenizer.model_max_length,
+                truncation=True,
+                return_tensors="pt",
+            )
+            text_input_ids = text_inputs.input_ids
+            prompt_embeds = text_encoder(
+                text_input_ids.to(text_encoder.device),
+                output_hidden_states=True,
+            )
+
+            # We are only ALWAYS interested in the pooled output of the final text encoder
+            pooled_prompt_embeds = prompt_embeds[0]
+            prompt_embeds = prompt_embeds.hidden_states[-2]
+            bs_embed, seq_len, _ = prompt_embeds.shape
+            prompt_embeds = prompt_embeds.view(bs_embed, seq_len, -1)
+            prompt_embeds_list.append(prompt_embeds)
+
+    prompt_embeds = torch.concat(prompt_embeds_list, dim=-1)
+    pooled_prompt_embeds = pooled_prompt_embeds.view(bs_embed, -1)
+    return prompt_embeds.cpu(), pooled_prompt_embeds.cpu()
+
+
+# time ids
+def compute_time_ids(original_size, target_size, crops_coords_top_left, device, dtype):
+    # Adapted from pipeline.StableDiffusionXLPipeline._get_add_time_ids
+    target_size = [target_size, target_size]
+    add_time_ids = original_size.tolist() + crops_coords_top_left.tolist() + target_size
+    add_time_ids = torch.tensor([add_time_ids])
+    add_time_ids = add_time_ids.to(device, dtype=dtype)
+    return add_time_ids
 
 
 def init_dist(launcher="slurm", backend='nccl', port=29500, **kwargs):
@@ -71,7 +123,6 @@ def init_dist(launcher="slurm", backend='nccl', port=29500, **kwargs):
         raise NotImplementedError(f'Not implemented launcher type: `{launcher}`!')
     
     return local_rank
-
 
 
 def main(
@@ -165,12 +216,12 @@ def main(
     # Load scheduler, tokenizer and models.
     noise_scheduler = DDIMScheduler(**OmegaConf.to_container(noise_scheduler_kwargs))
 
-    vae          = AutoencoderKL.from_pretrained(pretrained_model_path, subfolder="vae")
+    vae            = AutoencoderKL.from_pretrained(pretrained_model_path, subfolder="vae")
 
-    tokenizer    = CLIPTokenizer.from_pretrained(pretrained_model_path, subfolder="tokenizer")
+    tokenizer_1    = CLIPTokenizer.from_pretrained(pretrained_model_path, subfolder="tokenizer")
     tokenizer_2    = CLIPTokenizer.from_pretrained(pretrained_model_path, subfolder="tokenizer_2")
 
-    text_encoder = CLIPTextModel.from_pretrained(pretrained_model_path, subfolder="text_encoder")
+    text_encoder_1 = CLIPTextModel.from_pretrained(pretrained_model_path, subfolder="text_encoder")
     text_encoder_2 = CLIPTextModelWithProjection.from_pretrained(pretrained_model_path, subfolder="text_encoder_2")
 
     if not image_finetune:
@@ -194,7 +245,7 @@ def main(
         
     # Freeze vae and text_encoder
     vae.requires_grad_(False)
-    text_encoder.requires_grad_(False)
+    text_encoder_1.requires_grad_(False)
     text_encoder_2.requires_grad_(False)
     
     # Set unet trainable parameters
@@ -229,17 +280,27 @@ def main(
     if gradient_checkpointing:
         unet.enable_gradient_checkpointing()
 
-    # Move models to GPU
-    vae.to(local_rank)
-    text_encoder.to(local_rank)
-    text_encoder_2.to(local_rank)
+    # # Move models to GPU
+
+    # Function for prompt encoding
+    text_encoders = [text_encoder_1, text_encoder_2]
+    tokenizers = [tokenizer_1, tokenizer_2]
+    compute_embeddings_fn = partial(
+        encode_prompt,
+        text_encoders=text_encoders,
+        tokenizers=tokenizers,
+        use_empty_prompts=cfg_random_null_text,
+        proportion_empty_prompts=cfg_random_null_text_ratio,
+        caption_column='text',
+    )
 
     # Get the training dataset
     assert dataset_name in ['webvid', 'sakugabooru']
     if dataset_name == 'webvid':
         train_dataset = WebVid10M(**train_data, is_image=image_finetune)
     elif dataset_name == 'sakugabooru':
-        train_dataset = Sakugabooru(**train_data, is_image=image_finetune)
+        # train_dataset = Sakugabooru(**train_data, is_image=image_finetune)
+        raise NotImplementedError
     distributed_sampler = DistributedSampler(
         train_dataset,
         num_replicas=num_processes,
@@ -284,9 +345,9 @@ def main(
         validation_pipeline = AnimationXLPipeline(
             unet=unet, 
             vae=vae, 
-            tokenizer=tokenizer, 
+            tokenizer=tokenizer_1, 
             tokenizer_2=tokenizer_2,
-            text_encoder=text_encoder, 
+            text_encoder=text_encoder_1, 
             text_encoder_2=text_encoder_2, 
             scheduler=noise_scheduler,
         ).to("cuda")
@@ -295,9 +356,9 @@ def main(
             pretrained_model_path,
             unet=unet, 
             vae=vae, 
-            tokenizer=tokenizer, 
+            tokenizer=tokenizer_1, 
             tokenizer_2=tokenizer_2, 
-            text_encoder=text_encoder, 
+            text_encoder=text_encoder_1, 
             text_encoder_2=text_encoder_2, 
             scheduler=noise_scheduler, 
             safety_checker=None,
@@ -339,9 +400,6 @@ def main(
         unet.train()
         
         for step, batch in enumerate(train_dataloader):
-            if cfg_random_null_text:
-                batch['text'] = [name if random.random() > cfg_random_null_text_ratio else "" for name in batch['text']]
-                
             # Data batch sanity check
             if epoch == first_epoch and step == 0:
                 pixel_values, texts = batch['pixel_values'].cpu(), batch['text']
@@ -386,11 +444,15 @@ def main(
             
             # Get the text embedding for conditioning
             with torch.no_grad():
-                # TODO: integrate tokenizer_2 and text_encoder_2
-                prompt_ids = tokenizer(
-                    batch['text'], max_length=tokenizer.model_max_length, padding="max_length", truncation=True, return_tensors="pt"
-                ).input_ids.to(latents.device)
-                encoder_hidden_states = text_encoder(prompt_ids)[0]
+                prompt_embeds, pooled_prompt_embeds = compute_embeddings_fn(batch)
+                prompt_embeds.to(latents.device)
+                pooled_prompt_embeds.to(latents.device)
+
+            add_time_ids = torch.cat(
+                [compute_time_ids(s, train_data.sample_size, c, latents.device, latents.dtype) for s, c in zip(batch["original_sizes"], batch["crop_top_lefts"])]
+            )
+            unet_added_conditions = {"time_ids": add_time_ids}
+            unet_added_conditions.update({"text_embeds": pooled_prompt_embeds})
                 
             # Get the target for loss depending on the prediction type
             if noise_scheduler.config.prediction_type == "epsilon":
@@ -403,7 +465,7 @@ def main(
             # Predict the noise residual and compute loss
             # Mixed-precision training
             with torch.cuda.amp.autocast(enabled=mixed_precision_training):
-                model_pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample
+                model_pred = unet(noisy_latents, timesteps, prompt_embeds, added_cond_kwargs=unet_added_conditions).sample
                 loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
 
             optimizer.zero_grad()

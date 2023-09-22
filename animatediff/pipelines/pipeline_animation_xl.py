@@ -1,9 +1,10 @@
 # Adapted from https://github.com/huggingface/diffusers/blob/main/src/diffusers/pipelines/stable_diffusion/pipeline_stable_diffusion.py
 
 import inspect
-from typing import Callable, List, Optional, Union
+from typing import Callable, List, Optional, Union, Dict, Any, Tuple
 from dataclasses import dataclass
 
+import os
 import numpy as np
 from tqdm import tqdm
 import PIL
@@ -20,7 +21,7 @@ from diffusers.utils import (
     is_invisible_watermark_available,
     logging,
     randn_tensor,
-    replace_example_docstring,
+    BaseOutput
 )
 from diffusers.loaders import FromSingleFileMixin, LoraLoaderMixin, TextualInversionLoaderMixin
 from diffusers.models import AutoencoderKL
@@ -34,6 +35,20 @@ from einops import rearrange, repeat
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+
+EXAMPLE_DOC_STRING = """
+    Examples:
+        ```py
+        >>> import torch
+        >>> from diffusers import StableDiffusionPipeline
+
+        >>> pipe = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5", torch_dtype=torch.float16)
+        >>> pipe = pipe.to("cuda")
+
+        >>> prompt = "a photo of an astronaut riding a horse on mars"
+        >>> image = pipe(prompt).images[0]
+        ```
+"""
 
 
 @dataclass
@@ -362,7 +377,7 @@ class AnimationXLPipeline(DiffusionPipeline, FromSingleFileMixin, LoraLoaderMixi
 
     # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_latents
     def prepare_latents(self, init_image, batch_size, num_channels_latents, video_length, height, width, dtype, device, 
-                        generator, denoise_strength=None, noise_timestep=None, latents=None):
+                        generator, noise_timestep=None, latents=None):
         shape = (
             batch_size, 
             num_channels_latents, 
@@ -456,7 +471,6 @@ class AnimationXLPipeline(DiffusionPipeline, FromSingleFileMixin, LoraLoaderMixi
             self.vae.decoder.mid_block.to(dtype)
 
     @torch.no_grad()
-    @replace_example_docstring(EXAMPLE_DOC_STRING)
     def __call__(
         self,
         prompt: Union[str, List[str]] = None,
@@ -587,7 +601,6 @@ class AnimationXLPipeline(DiffusionPipeline, FromSingleFileMixin, LoraLoaderMixi
             prompt_embeds.dtype,
             device,
             generator,
-            denoise_timestep=denoise_timestep,
             noise_timestep=noise_timestep,
             latents=latents,
         )
@@ -609,7 +622,7 @@ class AnimationXLPipeline(DiffusionPipeline, FromSingleFileMixin, LoraLoaderMixi
 
         prompt_embeds = prompt_embeds.to(device)
         add_text_embeds = add_text_embeds.to(device)
-        add_time_ids = add_time_ids.to(device).repeat(batch_size * num_images_per_prompt, 1)
+        add_time_ids = add_time_ids.to(device).repeat(batch_size * num_videos_per_prompt, 1)
 
         if init_image:
             timesteps = timesteps_img2img
