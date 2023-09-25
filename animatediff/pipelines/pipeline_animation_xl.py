@@ -20,9 +20,9 @@ from diffusers.utils import (
     is_accelerate_version, 
     is_invisible_watermark_available,
     logging,
-    randn_tensor,
     BaseOutput
 )
+from diffusers.utils.torch_utils import randn_tensor
 from diffusers.loaders import FromSingleFileMixin, LoraLoaderMixin, TextualInversionLoaderMixin
 from diffusers.models import AutoencoderKL
 from diffusers.schedulers import KarrasDiffusionSchedulers
