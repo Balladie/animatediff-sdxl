@@ -86,8 +86,10 @@ def encode_prompt(batch, text_encoders, tokenizers, use_empty_prompts, proportio
 # time ids
 def compute_time_ids(original_size, target_size, crops_coords_top_left, device, dtype):
     # Adapted from pipeline.StableDiffusionXLPipeline._get_add_time_ids
-    target_size = [target_size, target_size]
-    add_time_ids = original_size.tolist() + crops_coords_top_left.tolist() + target_size
+    original_size_tuple = tuple(original_size.int().tolist())
+    crops_coords_top_left_tuple = tuple(crops_coords_top_left.int().tolist())
+    target_size_tuple = (target_size, target_size)
+    add_time_ids = list(original_size_tuple + crops_coords_top_left_tuple + target_size_tuple)
     add_time_ids = torch.tensor([add_time_ids])
     add_time_ids = add_time_ids.to(device, dtype=dtype)
     return add_time_ids
