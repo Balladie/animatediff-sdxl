@@ -5,7 +5,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from diffusers.utils import maybe_allow_in_graph
+from diffusers.utils.torch_utils import maybe_allow_in_graph
 from diffusers.models.attention import FeedForward, AdaLayerNorm, AdaLayerNormZero, GatedSelfAttentionDense
 from diffusers.models.attention_processor import Attention
 

@@ -5,6 +5,8 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from diffusers.utils import is_torch_version
+
 from .resnet import ResnetBlock3D, Downsample3D, Upsample3D
 from .motion_module import get_motion_module
 from .transformer_2d import Transformer3DModel
