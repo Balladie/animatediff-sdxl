@@ -692,12 +692,10 @@ class AnimationXLPipeline(DiffusionPipeline, FromSingleFileMixin, LoraLoaderMixi
 
         # apply watermark if available
         if self.watermark is not None:
-            image = self.watermark.apply_watermark(image)
+            video = self.watermark.apply_watermark(video)
 
-        image = self.image_processor.postprocess(image, output_type=output_type)
-
-        video = rearrange(video, "(b f) c h w -> b c f h w", f=video_length)
-        video = video.cpu().float().numpy()
+        video = self.image_processor.postprocess(video, output_type="np")
+        video = rearrange(video, "(b f) h w c -> b c f h w", f=video_length)
 
         # Offload last model to CPU
         if hasattr(self, "final_offload_hook") and self.final_offload_hook is not None:
@@ -707,7 +705,7 @@ class AnimationXLPipeline(DiffusionPipeline, FromSingleFileMixin, LoraLoaderMixi
             video = torch.from_numpy(video)
 
         if not return_dict:
-            return (image,)
+            return (video,)
 
         return AnimationXLPipelineOutput(videos=video)
 
