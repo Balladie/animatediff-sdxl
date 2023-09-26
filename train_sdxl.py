@@ -25,7 +25,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 import diffusers
-from diffusers import AutoencoderKL, DDIMScheduler
+from diffusers import AutoencoderKL, DDPMScheduler
 from diffusers.models import UNet2DConditionModel
 from diffusers.pipelines import StableDiffusionXLPipeline
 from diffusers.optimization import get_scheduler
@@ -216,7 +216,7 @@ def main(
         OmegaConf.save(config, os.path.join(output_dir, 'config.yaml'))
 
     # Load scheduler, tokenizer and models.
-    noise_scheduler = DDIMScheduler(**OmegaConf.to_container(noise_scheduler_kwargs))
+    noise_scheduler = DDPMScheduler(**OmegaConf.to_container(noise_scheduler_kwargs))
 
     vae            = AutoencoderKL.from_pretrained(pretrained_model_path, subfolder="vae")
 
