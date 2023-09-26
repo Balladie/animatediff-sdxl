@@ -450,8 +450,11 @@ def main(
                 prompt_embeds.to(latents.device)
                 pooled_prompt_embeds.to(latents.device)
 
+            original_sizes = torch.stack(batch["original_sizes"]).permute(1, 0)
+            crop_top_lefts = torch.stack(batch["crop_top_lefts"]).permute(1, 0)
+
             add_time_ids = torch.cat(
-                [compute_time_ids(s, train_data.sample_size, c, latents.device, latents.dtype) for s, c in zip(batch["original_sizes"], batch["crop_top_lefts"])]
+                [compute_time_ids(s, train_data.sample_size, c, latents.device, latents.dtype) for s, c in zip(original_sizes, crop_top_lefts)]
             )
             unet_added_conditions = {"time_ids": add_time_ids}
             unet_added_conditions.update({"text_embeds": pooled_prompt_embeds})
