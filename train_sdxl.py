@@ -102,7 +102,7 @@ def init_dist(launcher="slurm", backend='nccl', port=29500, **kwargs):
         num_gpus = torch.cuda.device_count()
         local_rank = rank % num_gpus
         torch.cuda.set_device(local_rank)
-        dist.init_process_group(backend=backend, **kwargs)
+        dist.init_process_group(backend=backend, timeout=datetime.timedelta(seconds=7200000), **kwargs)
         
     elif launcher == 'slurm':
         proc_id = int(os.environ['SLURM_PROCID'])
